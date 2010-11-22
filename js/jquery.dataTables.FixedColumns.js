@@ -1,6 +1,6 @@
 /*
  * File:        FixedColumns.js
- * Version:     1.0.1.dev
+ * Version:     1.0.2.dev
  * Description: "Fix" columns on the left of a scrolling DataTable
  * Author:      Allan Jardine (www.sprymedia.co.uk)
  * Created:     Sat Sep 18 09:28:54 BST 2010
@@ -120,6 +120,18 @@ var FixedColumns = function ( oDT, oInit ) {
 
 FixedColumns.prototype = {
 	/**
+	 * Update the fixed columns - including headers and footers
+	 *  @method  fnUpdate
+	 *  @returns void
+	 */
+	"fnUpdate": function ()
+	{
+		this._fnClone( true );
+		this._fnScroll();
+	},
+	
+	
+	/**
 	 * Initialisation for FixedColumns
 	 *  @method  _fnConstruct
 	 *  @param   {Object} oInit User settings for initialisation
@@ -178,14 +190,14 @@ FixedColumns.prototype = {
 		
 		this.s.dt.aoDrawCallback.push( {
 			"fn": function () {
-				that._fnClone.call( that );
+				that._fnClone.call( that, false );
 				that._fnScroll.call( that );
 			},
 			"sName": "FixedColumns"
 		} );
 		
 		/* Get things right to start with */
-		this._fnClone();
+		this._fnClone( true );
 		this._fnScroll();
 	},
 	
@@ -194,53 +206,50 @@ FixedColumns.prototype = {
 	 * Clone the DataTable nodes and place them in the DOM (sized correctly)
 	 *  @method  _fnClone
 	 *  @returns void
+	 *  @param   {Boolean} bAll Indicate if the headre and footer should be updated as well (true)
 	 *  @private
 	 */
-	"_fnClone": function ()
+	"_fnClone": function ( bAll )
 	{
 		var
 			that = this,
 			iTableWidth = 0,
 			aiCellWidth = [],
-			i, iLen, jq,
-			bRubbishOldIE = ($.browser.msie && ($.browser.version == "6.0" || $.browser.version == "7.0"));
+			i, iLen, jq;
 		
 		/* Grab the widths that we are going to need */
 		for ( i=0, iLen=this.s.columns ; i<iLen ; i++ )
 		{
-			jq = $('thead th:eq('+i+')', this.dom.header);
+			jq = $('thead tr:eq(0)', this.dom.header).children(':eq('+i+')');
 			iTableWidth += jq.outerWidth();
 			aiCellWidth.push( jq.width() );
 		}
 		
-		
 		/* Header */
-		$(this.dom.header).css( 'height', 'auto' ); /* Remove heights for Firefox bug */
-		
-		if ( this.dom.clone.header !== null )
+		if ( bAll )
 		{
-			this.dom.clone.header.parentNode.removeChild( this.dom.clone.header );
+			if ( this.dom.clone.header !== null )
+			{
+				this.dom.clone.header.parentNode.removeChild( this.dom.clone.header );
+			}
+			this.dom.clone.header = $(this.dom.header).clone(true)[0];
+			this.dom.clone.header.className += " FixedColumns_Cloned";
+			
+			$('thead tr', this.dom.clone.header).each( function () {
+				$(this).children(':gt('+(that.s.columns-1)+')').remove();
+			} );
+			
+			this.dom.clone.header.style.position = "absolute";
+			this.dom.clone.header.style.top = "0px";
+			this.dom.clone.header.style.left = "0px";
+			this.dom.clone.header.style.width = iTableWidth+"px";
+			this.dom.header.parentNode.appendChild( this.dom.clone.header );
 		}
-		this.dom.clone.header = $(this.dom.header).clone(true)[0];
-		this.dom.clone.header.className += " FixedColumns_Cloned";
 		
-		$('thead tr:eq(0)', this.dom.clone.header).each( function () {
-			$('th:gt('+(that.s.columns-1)+')', this).remove();
-		} );
-		$(this.dom.header).height( $(that.dom.header).height() ); /* Needed for a Firefox bug */
-		$(this.dom.clone.header).height( $(that.dom.header).height() );
-		
-		$('thead tr:gt(0)', this.dom.clone.header).remove();
-		
-		$('thead th', this.dom.clone.header).each( function (i) {
+		this.fnEqualiseHeights( 'thead', this.dom.header, this.dom.clone.header );
+		$('thead tr:eq(0)', this.dom.clone.header).children().each( function (i) {
 			this.style.width = aiCellWidth[i]+"px";
 		} );
-		
-		this.dom.clone.header.style.position = "absolute";
-		this.dom.clone.header.style.top = "0px";
-		this.dom.clone.header.style.left = "0px";
-		this.dom.clone.header.style.width = iTableWidth+"px";
-		this.dom.header.parentNode.appendChild( this.dom.clone.header );
 		
 		
 		/* Body */
@@ -250,104 +259,108 @@ FixedColumns.prototype = {
 		if ( this.dom.clone.body !== null )
 		{
 			this.dom.clone.body.parentNode.removeChild( this.dom.clone.body );
+			this.dom.clone.body = null;
 		}
-		this.dom.clone.body = $(this.dom.body).clone(true)[0];
-		this.dom.clone.body.className += " FixedColumns_Cloned";
-		if ( this.dom.clone.body.getAttribute('id') !== null )
+		
+		if ( this.s.dt.aiDisplay.length > 0 )
 		{
-			this.dom.clone.body.removeAttribute('id');
+			this.dom.clone.body = $(this.dom.body).clone(true)[0];
+			this.dom.clone.body.className += " FixedColumns_Cloned";
+			if ( this.dom.clone.body.getAttribute('id') !== null )
+			{
+				this.dom.clone.body.removeAttribute('id');
+			}
+			
+			$('thead tr:eq(0)', this.dom.clone.body).each( function () {
+				$('th:gt('+(that.s.columns-1)+')', this).remove();
+			} );
+			
+			$('thead tr:gt(0)', this.dom.clone.body).remove();
+			
+			this.fnEqualiseHeights( 'tbody', that.dom.body, this.dom.clone.body );
+			
+			$('tfoot tr:eq(0)', this.dom.clone.body).each( function () {
+				$('th:gt('+(that.s.columns-1)+')', this).remove();
+			} );
+			
+			$('tfoot tr:gt(0)', this.dom.clone.body).remove();
+			
+			
+			this.dom.clone.body.style.position = "absolute";
+			this.dom.clone.body.style.top = "0px";
+			this.dom.clone.body.style.left = "0px";
+			this.dom.clone.body.style.width = iTableWidth+"px";
+			this.dom.body.parentNode.appendChild( this.dom.clone.body );
 		}
-		
-		$('thead tr:eq(0)', this.dom.clone.body).each( function () {
-			$('th:gt('+(that.s.columns-1)+')', this).remove();
-		} );
-		
-		$('thead tr:gt(0)', this.dom.clone.body).remove();
-		
-		var iTopPadding = $('tbody tr:eq(0) td:eq(0)', that.dom.body).css('paddingTop');
-		iTopPadding = parseInt( iTopPadding.replace('px', ''), 10 );
-		
-		var iBottomPadding = $('tbody tr:eq(0) td:eq(0)', that.dom.body).css('paddingBottom');
-		iBottomPadding = parseInt( iBottomPadding.replace('px', ''), 10 );
-		
-		var iTopBorder = $('tbody tr:eq(0) td:eq(0)', that.dom.body).css('borderTopWidth');
-		iTopBorder = parseInt( iTopBorder.replace('px', ''), 10 );
-		
-		var iBottomBorder = $('tbody tr:eq(0) td:eq(0)', that.dom.body).css('borderBottomWidth');
-		iBottomBorder = parseInt( iBottomBorder.replace('px', ''), 10 );
-		
-		var iBoxHack = iTopPadding + iBottomPadding + iTopBorder + iBottomBorder;
-		
-		/* Remove cells which are not needed and copy the height from the original table */
-		$('tbody tr', this.dom.clone.body).each( function (k) {
-			$('td:gt('+(that.s.columns-1)+')', this).remove();
-			
-			/* Can we use some kind of object detection here?! This is very nasty - damn browsers */
-			if ( $.browser.mozilla || $.browser.opera )
-			{
-				$('td', this).height( $('tbody tr:eq('+k+')', that.dom.body).outerHeight() );
-			}
-			else
-			{
-				$('td', this).height( $('tbody tr:eq('+k+')', that.dom.body).outerHeight() - iBoxHack );
-			}
-			
-			/* It's only really IE8 and Firefox which need this, but to simplify, lets apply to all.
-			 * The reason it is needed at all is sub-pixel rounded, which is done differently in every
-			 * browser... Except of course IE6 and IE7 - applying the height to them causes the cell
-			 * size to grow, but they don't mess around with sub-pixels so we can do nothing.
-			 */
-			if ( !bRubbishOldIE )
-			{
-				$('tbody tr:eq('+k+')', that.dom.body).height( $('tbody tr:eq('+k+')', that.dom.body).outerHeight() );		
-			}
-		} );
-		
-		$('tfoot tr:eq(0)', this.dom.clone.body).each( function () {
-			$('th:gt('+(that.s.columns-1)+')', this).remove();
-		} );
-		
-		$('tfoot tr:gt(0)', this.dom.clone.body).remove();
-		
-		
-		this.dom.clone.body.style.position = "absolute";
-		this.dom.clone.body.style.top = "0px";
-		this.dom.clone.body.style.left = "0px";
-		this.dom.clone.body.style.width = iTableWidth+"px";
-		this.dom.body.parentNode.appendChild( this.dom.clone.body );
-		
 		
 		/* Footer */
 		if ( this.s.dt.nTFoot !== null )
 		{
-			$(this.dom.footer).css( 'height', 'auto' ); /* Remove heights for Firefox bug */
-			
-			if ( this.dom.clone.footer !== null )
+			if ( bAll )
 			{
-				this.dom.clone.footer.parentNode.removeChild( this.dom.clone.footer );
+				if ( this.dom.clone.footer !== null )
+				{
+					this.dom.clone.footer.parentNode.removeChild( this.dom.clone.footer );
+				}
+				this.dom.clone.footer = $(this.dom.footer).clone(true)[0];
+				this.dom.clone.footer.className += " FixedColumns_Cloned";
+				
+				
+				$('tfoot tr', this.dom.clone.footer).each( function () {
+					$(this).children(':gt('+(that.s.columns-1)+')').remove();
+				} );
+				
+				this.dom.clone.footer.style.position = "absolute";
+				this.dom.clone.footer.style.top = "0px";
+				this.dom.clone.footer.style.left = "0px";
+				this.dom.clone.footer.style.width = iTableWidth+"px";
+				this.dom.footer.parentNode.appendChild( this.dom.clone.footer );
 			}
-			this.dom.clone.footer = $(this.dom.footer).clone(true)[0];
-			this.dom.clone.footer.className += " FixedColumns_Cloned";
 			
-			$('tfoot tr:eq(0)', this.dom.clone.footer).each( function () {
-				$('th:gt('+(that.s.columns-1)+')', this).remove();
-				$(this).height( $(that.dom.footer).height() );
-			} );
-			$(this.dom.footer).height( $(that.dom.footer).height() );
-			$(this.dom.clone.footer).height( $(that.dom.footer).height() );
+			this.fnEqualiseHeights( 'tfoot', this.dom.footer, this.dom.clone.footer );
 			
-			$('tfoot tr:gt(0)', this.dom.clone.footer).remove();
-			
-			$('tfoot th', this.dom.clone.footer).each( function (i) {
+			$('tfoot tr:eq(0)', this.dom.clone.footer).children().each( function (i) {
 				this.style.width = aiCellWidth[i]+"px";
 			} );
-			
-			this.dom.clone.footer.style.position = "absolute";
-			this.dom.clone.footer.style.top = "0px";
-			this.dom.clone.footer.style.left = "0px";
-			this.dom.clone.footer.style.width = iTableWidth+"px";
-			this.dom.footer.parentNode.appendChild( this.dom.clone.footer );
 		}
+	},
+	
+	
+	/**
+	 * Equalise the heights of the rows in a given table txxxx node in a cross browser way
+	 *  @method  fnEqualiseHeights
+	 *  @returns void
+	 *  @param   {string} parent Node type - thead, tbody or tfoot
+	 *  @param   {element} original Original node to take the heights from
+	 *  @param   {element} clone Copy the heights to
+	 *  @private
+	 */
+	"fnEqualiseHeights": function ( parent, original, clone )
+	{
+		var that = this,
+			jqBoxHack = $(parent+' tr:eq(0)', original).children(':eq(0)'),
+			iBoxHack = jqBoxHack.outerHeight() - jqBoxHack.height(),
+			bRubbishOldIE = ($.browser.msie && ($.browser.version == "6.0" || $.browser.version == "7.0"));
+		
+		/* Remove cells which are not needed and copy the height from the original table */
+		$(parent+' tr', clone).each( function (k) {
+			$(this).children(':gt('+(that.s.columns-1)+')', this).remove();
+			
+			/* Can we use some kind of object detection here?! This is very nasty - damn browsers */
+			if ( $.browser.mozilla || $.browser.opera )
+			{
+				$(this).children().height( $(parent+' tr:eq('+k+')', original).outerHeight() );
+			}
+			else
+			{
+				$(this).children().height( $(parent+' tr:eq('+k+')', original).outerHeight() - iBoxHack );
+			}
+			
+			if ( !bRubbishOldIE )
+			{
+				$(parent+' tr:eq('+k+')', original).height( $(parent+' tr:eq('+k+')', original).outerHeight() );		
+			}
+		} );
 	},
 	
 	
@@ -362,7 +375,10 @@ FixedColumns.prototype = {
 		var iScrollLeft = $(this.dom.scroller).scrollLeft();
 		
 		this.dom.clone.header.style.left = iScrollLeft+"px";
-		this.dom.clone.body.style.left = iScrollLeft+"px";
+		if ( this.dom.clone.body !== null )
+		{
+			this.dom.clone.body.style.left = iScrollLeft+"px";
+		}
 		if ( this.dom.footer )
 		{
 			this.dom.clone.footer.style.left = iScrollLeft+"px";
